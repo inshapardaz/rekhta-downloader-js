@@ -1,0 +1,28 @@
+{
+  "name": "rekhta-downloader-js",
+  "version": "1.0.0",
+  "description": "Downloader for rekhta books",
+  "author": "Muhammad Umer Farooq",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/inshapardaz/rekhta-downloader-js.git"
+  },
+  "source": "src/index.js",
+  "module": "lib/index.js",
+  "main": "dist/main.js",
+  "files": [
+    "css",
+    "es",
+    "lib",
+    "umd"
+  ],
+  "scripts": {
+    "watch": "parcel watch",
+    "build": "parcel build",
+    "start": "parcel demo/index.html --dist-dir demo/dist"
+  },
+  "devDependencies": {
+    "parcel": "^2.12.0"
+  }
+}

@@ -1,0 +1,38 @@
+name: Node.js Package
+
+on:
+  push:
+    branches: ["main"]
+    paths-ignore:
+      - "**/*.md"
+      - ".gitignore"
+      - ".editorconfig"
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-node@v3
+        with:
+          node-version: 20
+          registry-url: https://registry.npmjs.org/
+      - name: "Automated Version Bump"
+        uses: "phips28/gh-action-bump-version@master"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          minor-wording: "add,Adds,new"
+          major-wording: "MAJOR,cut-major"
+          patch-wording:
+            "patch,fixes" # Providing patch-wording will override commits
+            # defaulting to a patch bump.
+          rc-wording: "RELEASE,alpha"
+          tag-prefix: "v"
+      - run: npm ci
+      - run: npm run build
+      - run: npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{secrets.npm_token}}
