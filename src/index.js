@@ -1,29 +1,23 @@
-const opts = {
-    method: 'GET',
-    retry: 3,
-    pause: 1000,
-    callback: retry => { console.log(`Trying: ${retry}`) }
-}
+import axios from "axios";
 
 const bookDownload = async (url) => {
-    console.log('Fetching book:', url, opts);
+    console.log('Fetching book:', url);
 
-    const pageContents = await fetch(url);
+    const { data: pageContents } = await axios.get(url);
     const parser = new DOMParser();
     const document = parser.parseFromString(pageContents, 'text/html');
-
-    var bookName = document.querySelector('span.c-book-name').innerText.trim();
+    var bookName = document.querySelector('span.c-book-name')?.innerText?.trim();
     var author = document.querySelector('span.faded').innerText.replace(/\r?\n/g, '').replace(/ +/g, ' ').replace('by ', '').trim();
     var fileName = `${bookName} by ${author}`.trim().replace(/ +/g, ' ').replace(/ /g, '-');
 
-    var _bookId = FindTextBetween(pageContents, `var bookId = "`, `";`);
-    var actualUrl = FindTextBetween(pageContents, "var actualUrl =", ";");
-    var bookSlug = FindTextBetween(pageContents, "var bookslug ='", "';");
+    var bookId = findTextBetween(pageContents, `var bookId = "`, `";`);
+    var actualUrl = findTextBetween(pageContents, "var actualUrl =", ";");
+    var bookSlug = findTextBetween(pageContents, "var bookslug ='", "';");
 
-    var _pageCount = parseInt(FindTextBetween(pageContents, "var totalPageCount =", ";").trim());
-    var pages = StringToStringArray(FindTextBetween(pageContents, "var pages = [", "];"));
-    var pageIds = StringToStringArray(FindTextBetween(pageContents, "var pageIds = [", "];"));
-    console.table({ bookName, author, fileName, bookSlug, _bookId, url });
+    var _pageCount = parseInt(findTextBetween(pageContents, "var totalPageCount =", ";").trim());
+    var pages = stringToStringArray(findTextBetween(pageContents, "var pages = [", "];"));
+    var pageIds = stringToStringArray(findTextBetween(pageContents, "var pageIds = [", "];"));
+    console.table({ bookName, author, fileName, bookSlug, bookId, url });
 
     //Fetching parameters
     var scrambledImages = [];
@@ -31,19 +25,29 @@ const bookDownload = async (url) => {
     var scrambleMap = [];
     var pageImages = [];
     for (var i = 0; i < _pageCount; i++) {
-        var imgUrl = `https://ebooksapi.rekhta.org/images/${_bookId}/${pages[i]}`;
+        var imgUrl = `https://ebooksapi.rekhta.org/images/${bookId}/${pages[i]}`;
         var key = `https://ebooksapi.rekhta.org/api_getebookpagebyid_websiteapp/?wref=from-site&&pgid=${pageIds[i]}`;
         scrambledImages.push(imgUrl);
         keys.push(key);
         scrambleMap.push({ imgUrl, key });
-        pageImages.push(await dlImage(scrambleMap[i].key, scrambleMap[i].imgUrl, SUB_FOLDER, IMG_NAME));
+        var img = await downloadImage(scrambleMap[i].key, scrambleMap[i].imgUrl)
+        pageImages.push(img);
     }
-    var data = { bookName, author, _pageCount, _bookUrl, bookSlug, fileName, _bookId, actualUrl, pages, pageIds, scrambleMap };
+    var data = { bookName, author, _pageCount, url, bookSlug, fileName, bookId, actualUrl, pages, pageIds, scrambleMap };
     return data;
 }
 
-const unscrambleImage = async (key, input) => {
-    try {
+const findTextBetween = (source, start, end) => {
+    return source.split(start)[1].split(end)[0].trim();
+}
+
+const stringToStringArray = (input) => {
+    return input.split(",").map(item => item.replace(/"/g, "").trim());
+}
+
+const unscrambleImage = async (key, scrambledImageUrl) => {
+    return new Promise((resolve, reject) => {
+        console.log(key)
         const pageId = key.PageId;
         let originalHeight = key.PageHeight;
         let originalWidth = key.PageWidth;
@@ -57,50 +61,62 @@ const unscrambleImage = async (key, input) => {
         }
 
         const tileSize = 50;
-        const borderWidth = 16;
-        const scaleFactor = 1; // Adjust if necessary
 
         // The logic for "tilesize * data.x, and y" for canvasWidth and height doesn't work, adds a whitish margin (used by rekhta idk why and how). So Just use original ones as per api key. 
         const canvasWidth = originalWidth;
         const canvasHeight = originalHeight;
 
-        const canvas = createCanvas(canvasWidth, canvasHeight);
+        var canvas = document.createElement('canvas');
+
+        canvas.id = `canvas-${pageId}`;
+        canvas.width = canvasWidth;
+        canvas.height = canvasHeight;
+        canvas.style.zIndex = 8;
+        canvas.style.position = "absolute";
+        var body = document.getElementsByTagName("body")[0];
+        body.appendChild(canvas);
+
         const ctx = canvas.getContext('2d');
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-        const img = await loadImage(input); // Path to your original image
-        for (const sub of key.Sub) {
-            ctx.drawImage(
-                img,
-                sub.X1 * (tileSize + 16),
-                sub.Y1 * (tileSize + 16),
-                tileSize,
-                tileSize,
-                (sub.X2 * tileSize),
-                (sub.Y2 * tileSize),
-                tileSize,
-                tileSize
-            );
+        try {
+            var img = new Image;
+            img.crossOrigin = "";
+            img.onload = function () {
+                for (const sub of key.Sub) {
+                    ctx.drawImage(
+                        img,
+                        sub.X1 * (tileSize + 16),
+                        sub.Y1 * (tileSize + 16),
+                        tileSize,
+                        tileSize,
+                        (sub.X2 * tileSize),
+                        (sub.Y2 * tileSize),
+                        tileSize,
+                        tileSize
+                    );
+                }
+                resolve(canvas.toDataURL('image/png'));
+            };
+            img.src = scrambledImageUrl;
+        } catch (error) {
+            console.error('Error unscrambling image:', error);
+            reject(error);
         }
-
-        return canvas.toDataURL('image/png');
-    } catch (error) {
-        console.error('Error unscrambling image:', error);
-    }
+        finally {
+            body.removeChild(canvas);
+        }
+    });
 }
 
-const dlImage = async (keyUrl, scrambledImageUrl) => {
+const downloadImage = async (keyUrl, scrambledImageUrl) => {
     try {
-        // Download the scrambled image
-        const { data: scrambledImage } = await axios.get(scrambledImageUrl, {
-            responseType: 'arraybuffer'
+        console.log('getting keyUrl :>> ', keyUrl);
+        const { data: key } = await axios.get(keyUrl, {
+            headers: { 'Accept': 'application/json' }
         });
 
-        // Download the key JSON
-        const { data: key } = await axios.get(keyUrl);
-
-        // Unscramble and download the images
-        unscrambleImage(key, scrambledImage);
+        unscrambleImage(key, scrambledImageUrl);
     } catch (error) {
         console.error('Error:', error.message);
     }

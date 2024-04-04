@@ -23,6 +23,10 @@
     "start": "parcel demo/index.html --dist-dir demo/dist"
   },
   "devDependencies": {
+    "buffer": "^6.0.3",
     "parcel": "^2.12.0"
+  },
+  "dependencies": {
+    "axios": "^1.6.8"
   }
 }
